@@ -11,6 +11,9 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 app.use(express.static('public'));
+app.get('/health', (_req, res) => {
+    res.status(200).send('ok');
+});
 
 // ==========================================
 // 1. INTEGRACIÓN CON TWITCH
@@ -179,6 +182,10 @@ initYouTube();
 // INICIO DEL SERVIDOR
 // ==========================================
 const PORT = Number(process.env.PORT) || 3001;
-server.listen(PORT, () => {
-    console.log(`🚀 Servidor unificado corriendo en http://localhost:${PORT}`);
+const HOST = process.env.HOST || '0.0.0.0';
+
+server.listen(PORT, HOST, () => {
+    const displayHost = HOST === '0.0.0.0' ? 'localhost' : HOST;
+    console.log(`🚀 Servidor unificado corriendo en http://${displayHost}:${PORT}`);
+    console.log(`Escuchando en ${HOST}:${PORT}`);
 });
