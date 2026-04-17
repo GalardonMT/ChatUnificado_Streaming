@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multistream Chat</title>
+    <style>
+        :root{
+            --bg: #0f0f11;
+            --panel: rgba(255,255,255,0.04);
+            --muted: #b9b9bd;
+            --accent-twitch: #9146FF;
+            --accent-youtube: #FF0000;
+            --accent-kick: #53FC18;
+            --max-width: 420px;
+        }
+
+        html,body{height:100%;}
+        body {
+            margin: 0;
+            background: linear-gradient(180deg,#0b0b0c 0%, #111113 100%);
+            color: #eee;
+            font-family: Inter, 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            padding:20px;
+            -webkit-font-smoothing:antialiased;
+        }
+
+        .card{
+            width:100%;
+            max-width:var(--max-width);
+            background:var(--panel);
+            border-radius:12px;
+            box-shadow:0 6px 30px rgba(0,0,0,0.6);
+            overflow:hidden;
+            display:flex;
+            flex-direction:column;
+            height:90vh;
+        }
+
+        .header{
+            display:flex;
+            align-items:center;
+            gap:10px;
+            padding:12px 16px;
+            border-bottom:1px solid rgba(255,255,255,0.03);
+        }
+
+        .title{
+            font-weight:600;
+            font-size:1rem;
+        }
+
+        .subtitle{color:var(--muted);font-size:0.85rem}
+
+        #chat-container {
+            padding:12px 12px 18px 12px;
+            flex:1 1 auto;
+            overflow-y:auto;
+            display:flex;
+            flex-direction:column;
+            gap:10px;
+        }
+
+        /* mensaje */
+        .mensaje-box{
+            display:flex;
+            gap:10px;
+            align-items:flex-start;
+            background:rgba(0,0,0,0.25);
+            border-radius:10px;
+            padding:8px 10px;
+            animation:fadeIn .18s ease-out;
+        }
+
+        .avatar{
+            width:36px;height:36px;border-radius:0;
+            background:transparent;
+            display:flex;align-items:center;justify-content:center;
+            color:#fff;font-size:0.85rem;flex:0 0 36px;overflow:visible
+        }
+        .avatar img{width:100%;height:100%;object-fit:contain;display:block}
+        .avatar.fallback{
+            background:rgba(255,255,255,0.12);
+            border-radius:6px;
+            font-weight:700;
+        }
+
+        .msg-body{flex:1;min-width:0}
+        .meta{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+        .usuario{font-weight:700;font-size:0.95rem}
+        .plat-twitch .usuario{color:var(--accent-twitch)}
+        .plat-youtube .usuario{color:var(--accent-youtube)}
+        .plat-kick .usuario{color:var(--accent-kick)}
+        .badge{font-size:0.7rem;padding:2px 6px;border-radius:999px;color:#000;background:#fff}
+        .texto{color:#f2f2f2;line-height:1.35;font-size:0.95rem;word-break:break-word}
+
+        /* scrollbar invisible but still scrollable */
+        #chat-container::-webkit-scrollbar{width:8px}
+        #chat-container::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.06);border-radius:8px}
+
+        @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+        /* Responsive adjustments */
+        @media (max-width:600px){
+            body{padding:10px}
+            .card{height:85vh;border-radius:10px}
+            .avatar{width:32px;height:32px;font-size:0.8rem;flex-basis:32px}
+            .title{font-size:0.95rem}
+            .texto{font-size:0.92rem}
+        }
+
+        @media (max-width:380px){
+            .card{height:80vh}
+            #chat-container{padding:10px}
+            .avatar{width:28px;height:28px;flex-basis:28px}
+            .usuario{font-size:0.9rem}
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card" role="region" aria-label="Chat">
+        <div class="header">
+            <div>
+                <div class="title">Multistream Chat</div>
+                <div class="subtitle">Mensajes unificados de Twitch · YouTube · Kick</div>
+            </div>
+        </div>
+
+        <div id="chat-container" aria-live="polite"></div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const chatContainer = document.getElementById('chat-container');
+
+        socket.on('nuevo_mensaje', (data) => {
+            agregarMensajeDOM(data);
+        });
+
+        function createAvatar(name, platform){
+            const container = document.createElement('div');
+            container.classList.add('avatar');
+            const img = document.createElement('img');
+            img.alt = platform + ' icon';
+            // Try PNG first (user placed .png), then fall back to SVG, then to initial
+            img.src = `/assets/icons/${platform}.png`;
+            img.onerror = function(){
+                try {
+                    if (img.src.endsWith('.png')) {
+                        img.src = `/assets/icons/${platform}.svg`;
+                        return;
+                    }
+                } catch (e) {}
+                if (container.contains(img)) container.removeChild(img);
+                container.classList.add('fallback');
+                container.innerText = (name||'?').trim().charAt(0).toUpperCase();
+            };
+            container.appendChild(img);
+            return container;
+        }
+
+        function platformBadge(platform){
+            const b = document.createElement('span');
+            b.classList.add('badge');
+            b.innerText = platform.toUpperCase();
+            return b;
+        }
+
+        function agregarMensajeDOM(data){
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('mensaje-box', `plat-${data.plataforma}`);
+
+            const avatar = createAvatar(data.usuario, data.plataforma);
+
+            const body = document.createElement('div');
+            body.classList.add('msg-body');
+
+            const meta = document.createElement('div');
+            meta.classList.add('meta');
+
+            const userSpan = document.createElement('div');
+            userSpan.classList.add('usuario');
+            userSpan.innerText = data.usuario;
+
+            const badge = platformBadge(data.plataforma);
+
+            meta.appendChild(userSpan);
+            meta.appendChild(badge);
+
+            const textDiv = document.createElement('div');
+            textDiv.classList.add('texto');
+            textDiv.innerText = data.mensaje;
+
+            body.appendChild(meta);
+            body.appendChild(textDiv);
+
+            msgDiv.appendChild(avatar);
+            msgDiv.appendChild(body);
+
+            chatContainer.appendChild(msgDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+    </script>
+</body>
+</html>
