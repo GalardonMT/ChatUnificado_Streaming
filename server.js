@@ -92,19 +92,52 @@ const youtube = google.youtube({
 let ytLiveChatId = null;
 let ytNextPageToken = '';
 
+async function getLiveVideoIdFromChannel(channelId) {
+    const res = await youtube.search.list({
+        part: 'id',
+        channelId,
+        eventType: 'live',
+        type: 'video',
+        maxResults: 1
+    });
+
+    const firstItem = res.data.items && res.data.items[0];
+    return firstItem?.id?.videoId || null;
+}
+
 async function initYouTube() {
     try {
-        if (!process.env.YOUTUBE_VIDEO_ID) return;
+        let videoId = process.env.YOUTUBE_VIDEO_ID;
+
+        // If VIDEO_ID is not provided, resolve current live stream using CHANNEL_ID.
+        if (!videoId && process.env.YOUTUBE_CHANNEL_ID) {
+            videoId = await getLiveVideoIdFromChannel(process.env.YOUTUBE_CHANNEL_ID);
+            if (!videoId) {
+                console.log('No se encontro un live activo para YOUTUBE_CHANNEL_ID.');
+                return;
+            }
+        }
+
+        if (!videoId) {
+            console.log('Falta YOUTUBE_VIDEO_ID o YOUTUBE_CHANNEL_ID en el archivo .env');
+            return;
+        }
         
         const res = await youtube.videos.list({
             part: 'liveStreamingDetails',
-            id: process.env.YOUTUBE_VIDEO_ID
+            id: videoId
         });
 
         if (res.data.items && res.data.items.length > 0) {
             ytLiveChatId = res.data.items[0].liveStreamingDetails.activeLiveChatId;
+            if (!ytLiveChatId) {
+                console.log('El live de YouTube no tiene chat activo.');
+                return;
+            }
             console.log("Conectado al chat de YouTube.");
             pollYouTubeChat(); 
+        } else {
+            console.log('No se pudo obtener liveStreamingDetails para YouTube.');
         }
     } catch (err) {
         console.error("Error conectando a YouTube:", err.message);
